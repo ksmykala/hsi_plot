@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 
@@ -13,46 +13,123 @@ def hsi_plot(
 
     temp_df['is_healthy'] = temp_df.disease == 'Control'
     spectra_columns, x = get_spectra_columns_and_range(temp_df)
+    agg = kwargs.get('agg', False)
 
-    fig = plt.figure(figsize=figsize)
-
-    legend_handles = {
-        'healthy': None, 'unhealthy': None
-    }
+    fig = go.Figure()
 
     for is_healthy in [False, True]:
         tdf = temp_df.loc[(temp_df.is_healthy == is_healthy), spectra_columns]
-
-        label = 'healthy' if is_healthy else 'unhealthy'
+        label = 'Healthy' if is_healthy else 'Unhealthy'
         color = 'limegreen' if is_healthy else 'red'
 
-        _p = plt.plot(
-            x, tdf.T, '-',
-            color=color, alpha=kwargs.get('alpha', 0.1), label=label)
-        if legend_handles[label] is None:
-            legend_handles[label] = _p[0]
+        if agg:
+            # Calculate mean and std for aggregated view
+            mean_values = tdf.mean()
+            std_values = tdf.std()
 
-        plt.xlim(x.min(), x.max())
-        plt.ylim(-0.01, 1.01)
-        plt.grid(True)
-        plt.title(title)
+            # Add standard deviation band first (so it's behind the mean line)
+            fig.add_trace(
+                go.Scatter(
+                    x=np.concatenate([x, x[::-1]]),
+                    y=np.concatenate([
+                        mean_values.values + std_values.values,
+                        (mean_values.values - std_values.values)[::-1]
+                    ]),
+                    fill='toself',
+                    fillcolor=color,
+                    line=dict(color='rgba(0,0,0,0)'),
+                    name=f'{label} ±1σ',
+                    showlegend=True,
+                    opacity=0.5,
+                    hoverinfo='skip'
+                )
+            )
 
-        plt.xlabel(kwargs.get('xlabel', ''), fontsize=14)
-        plt.ylabel(kwargs.get('ylabel', ''), fontsize=14)
+            # Add mean line
+            fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=mean_values.values,
+                    mode='lines',
+                    line=dict(color=color, width=2),
+                    name=f'{label} mean',
+                    hovertemplate=(
+                        'Wavelength: %{x}<br>'
+                        'Mean: %{y:.3f}<br>'
+                        '<extra></extra>'
+                    )
+                )
+            )
+        else:
+            # Calculate std for non-aggregated view
+            std_values = tdf.std()
+            mean_values = tdf.mean()
 
-    fig.legend(
-        [
-            legend_handles['healthy'],
-            legend_handles['unhealthy']
-        ],
-        [
-            'Healthy',
-            'Unhealthy'
-        ],
-        borderaxespad=5
+            # Original non-aggregated view
+            for _, row in tdf.iterrows():
+                fig.add_trace(
+                    go.Scatter(
+                        x=x,
+                        y=row.values,
+                        mode='lines',
+                        line=dict(color=color, width=1),
+                        opacity=kwargs.get('alpha', 0.1),
+                        showlegend=False,
+                        name=label,
+                        hovertemplate=(
+                            'Wavelength: %{x}<br>'
+                            'Intensity: %{y:.3f}<br>'
+                            '<extra></extra>'
+                        )
+                    )
+                )
 
+    # Add legend entries only for non-aggregated view
+    if not agg:
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode='lines',
+                line=dict(color='limegreen', width=2),
+                name='Healthy',
+                showlegend=True
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode='lines',
+                line=dict(color='red', width=2),
+                name='Unhealthy',
+                showlegend=True
+            )
+        )
+
+    # Update layout
+    fig.update_layout(
+        title=title,
+        xaxis_title=kwargs.get('xlabel', ''),
+        yaxis_title=kwargs.get('ylabel', ''),
+        xaxis=dict(range=[x.min(), x.max()]),
+        yaxis=dict(range=[-0.01, 1.01]),
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01
+        ),
+        width=figsize[0] * 100,
+        height=figsize[1] * 100,
+        plot_bgcolor='white',
+        hovermode='x unified'
     )
-    plt.tight_layout()
+
+    # Add grid
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray')
 
     return fig
 
@@ -69,7 +146,6 @@ def get_spectra_columns_and_range(temp_df: pd.DataFrame):
 def filter_spectre_columns(dataframe):
     spectre_cols = []
     spectre_cols_int = []
-
     non_spectre_cols = []
 
     for col in list(dataframe.columns):
