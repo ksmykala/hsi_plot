@@ -22,7 +22,7 @@ def show_hsi_chart():
         st.plotly_chart(fig, use_container_width=True)
 
 
-def load_df(filepath='data/sample_hsi.csv'):
+def load_df(filepath='./data/sample_hsi.csv'):
     with st.spinner('Loading dataset...'):
         df = pd.read_csv(filepath)
 
